@@ -2,16 +2,16 @@
 
 ExoQuant is a high-quality, easy to use color quantization library. This is for you if you need one or more of the following:
 
-* Very high-quality color reduction</li>
-* Reduction of images including alpha</li>
-* Creation of a shared palette for more than one image (or mipmap level)</li>
-* Dithering of the reduced image with very little noise</li>
+* Very high-quality color reduction
+* Reduction of images including alpha
+* Creation of a shared palette for more than one image (or mipmap level)
+* Dithering of the reduced image with very little noise
 
 ## Usage:
 
 First, of course, you need to include `exoquant.h`:
 
-    #include "exoquant.h"</pre>
+    #include "exoquant.h"
 
 Then for each image or texture to convert follow the following steps:
 
@@ -42,7 +42,7 @@ To feed the image data you have to call `exq_feed`, which can be called more tha
 
     exq_quantize(pExq, num_colors);
     exq_quantize_hq(pExq, num_colors);
-    exq_auantize_ex(pExq, num_colors, high_quality);
+    exq_quantize_ex(pExq, num_colors, high_quality);
 
 ### Step 4: Retrieve the palette
 
