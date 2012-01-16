@@ -56,10 +56,11 @@ extern "C" {
 #endif
 
 /* type definitions */
+typedef double exq_float;
 
 typedef struct _exq_color
 {
-	float r, g, b, a;
+	exq_float r, g, b, a;
 } exq_color;
 
 typedef struct _exq_histogram
@@ -77,21 +78,22 @@ typedef struct _exq_histogram
 typedef struct _exq_node
 {
 	exq_color				dir, avg;
-	float					vdif, split;
-	float					err;
+	exq_float					vdif;
+	exq_float					err;
 	int						num;
 	exq_histogram			*pHistogram;
+	exq_histogram			*pSplit;
 } exq_node;
 
-#define EXQ_HASH_BITS			4
-#define EXQ_HASH_CHANNEL_MASK	((1 << EXQ_HASH_BITS) - 1)
-#define EXQ_HASH_SIZE			(1 << (EXQ_HASH_BITS * 4))
+#define EXQ_HASH_BITS			16
+#define EXQ_HASH_SIZE			(1 << (EXQ_HASH_BITS))
 
 typedef struct _exq_data
 {
 	exq_histogram			*pHash[EXQ_HASH_SIZE];
 	exq_node				node[256];
 	int						numColors;
+	int						numBitsPerChannel;
 	int						optimized;
 	int						transparency;
 } exq_data;
@@ -106,16 +108,24 @@ void				exq_feed(exq_data *pExq, unsigned char *pData,
 void				exq_quantize(exq_data *pExq, int nColors);
 void				exq_quantize_hq(exq_data *pExq, int nColors);
 void				exq_quantize_ex(exq_data *pExq, int nColors, int hq);
-float				exq_get_mean_error(exq_data *pExq);
+exq_float			exq_get_mean_error(exq_data *pExq);
 void				exq_get_palette(exq_data *pExq, unsigned char *pPal,
+									int nColors);
+void				exq_set_palette(exq_data *pExq, unsigned char *pPal,
 									int nColors);
 void				exq_map_image(exq_data *pExq, int nPixels,
 								  unsigned char *pIn, unsigned char *pOut);
 void				exq_map_image_ordered(exq_data *pExq, int width,
-										  int height, unsigned char *pInt,
+										  int height, unsigned char *pIn,
 										  unsigned char *pOut);
+void				exq_map_image_random(exq_data *pExq, int nPixels,
+										  unsigned char *pIn, unsigned char *pOut);
 
 /* internal functions */
+
+void				exq_map_image_dither(exq_data *pExq, int width,
+										 int height, unsigned char *pIn,
+										 unsigned char *pOut, int ordered);
 
 void				exq_sum_node(exq_node *pNode);
 void				exq_optimize_palette(exq_data *pExp, int iter);
@@ -124,12 +134,12 @@ unsigned char		exq_find_nearest_color(exq_data *pExp, exq_color *pColor);
 exq_histogram		*exq_find_histogram(exq_data *pExp, unsigned char *pCol);
 
 void				exq_sort(exq_histogram **ppHist,
-						 float (*sortfunc)(const exq_histogram *pHist));
-float				exq_sort_by_r(const exq_histogram *pHist);
-float				exq_sort_by_g(const exq_histogram *pHist);
-float				exq_sort_by_b(const exq_histogram *pHist);
-float				exq_sort_by_a(const exq_histogram *pHist);
-float				exq_sort_by_dir(const exq_histogram *pHist);
+						 exq_float (*sortfunc)(const exq_histogram *pHist));
+exq_float			exq_sort_by_r(const exq_histogram *pHist);
+exq_float			exq_sort_by_g(const exq_histogram *pHist);
+exq_float			exq_sort_by_b(const exq_histogram *pHist);
+exq_float			exq_sort_by_a(const exq_histogram *pHist);
+exq_float			exq_sort_by_dir(const exq_histogram *pHist);
 
 extern exq_color	exq_sort_dir;
 

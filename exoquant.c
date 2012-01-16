@@ -25,10 +25,8 @@ SOFTWARE.
 #include "exoquant.h"
 #include <malloc.h>
 #include <math.h>
-
-#ifdef _MSC_VER /* the stupid vc7 math.h doesn't define sqrtf for C on x86 */
-#define sqrtf(x) ((float)sqrt((double)x))
-#endif
+#include <stdlib.h>
+#include <stdio.h>
 
 #ifndef NULL
 #define NULL (0)
@@ -52,6 +50,7 @@ exq_data *exq_init()
 	pExq->numColors = 0;
 	pExq->optimized = 0;
 	pExq->transparency = 1;
+	pExq->numBitsPerChannel = 8;
 
 	return pExq;
 }
@@ -76,20 +75,29 @@ void exq_free(exq_data *pExq)
 	free(pExq);
 }
 
+static unsigned int exq_make_hash(unsigned int rgba)
+{
+	rgba -= (rgba >> 13) | (rgba << 19);
+	rgba -= (rgba >> 13) | (rgba << 19);
+	rgba -= (rgba >> 13) | (rgba << 19);
+	rgba -= (rgba >> 13) | (rgba << 19);
+	rgba -= (rgba >> 13) | (rgba << 19);
+	rgba &= EXQ_HASH_SIZE - 1;
+	return rgba;
+}
+
 void exq_feed(exq_data *pExq, unsigned char *pData, int nPixels)
 {
 	int i;
-	int hash;
+	unsigned int hash;
 	unsigned char r, g, b, a;
 	exq_histogram *pCur;
+	unsigned char channelMask = 0xff00 >> pExq->numBitsPerChannel;
 
 	for(i = 0; i < nPixels; i++)
 	{
 		r = *pData++; g = *pData++; b = *pData++; a = *pData++;
-		hash = (r & EXQ_HASH_CHANNEL_MASK) +
-			((g & EXQ_HASH_CHANNEL_MASK) << EXQ_HASH_BITS) +
-			((b & EXQ_HASH_CHANNEL_MASK) << (EXQ_HASH_BITS * 2)) +
-			((a & EXQ_HASH_CHANNEL_MASK) << (EXQ_HASH_BITS * 3));
+		hash = exq_make_hash(((unsigned int)r) | (((unsigned int)g) << 8) | (((unsigned int)b) << 16) | (((unsigned int)a) << 24));
 
 		pCur = pExq->pHash[hash];
 		while(pCur != NULL && (pCur->or != r || pCur->og != g ||
@@ -104,6 +112,7 @@ void exq_feed(exq_data *pExq, unsigned char *pData, int nPixels)
 			pCur->pNextInHash = pExq->pHash[hash];
 			pExq->pHash[hash] = pCur;
 			pCur->or = r; pCur->og = g; pCur->ob = b; pCur->oa = a;
+			r &= channelMask; g &= channelMask; b &= channelMask;
 			pCur->color.r = r / 255.0f * SCALE_R;
 			pCur->color.g = g / 255.0f * SCALE_G;
 			pCur->color.b = b / 255.0f * SCALE_B;
@@ -139,7 +148,7 @@ void exq_quantize_hq(exq_data *pExq, int nColors)
 void exq_quantize_ex(exq_data *pExq, int nColors, int hq)
 {
 	int besti;
-	float bestv;
+	exq_float beste;
 	exq_histogram *pCur, *pNext;
 	int i, j;
 
@@ -163,34 +172,33 @@ void exq_quantize_ex(exq_data *pExq, int nColors, int hq)
 
 	for(i = pExq->numColors; i < nColors; i++)
 	{
-		bestv = 0;
+		beste = 0;
 		besti = 0;
 		for(j = 0; j < i; j++)
-			if(pExq->node[j].vdif >= bestv)
+			if(pExq->node[j].vdif >= beste)
 			{
-				bestv = pExq->node[j].vdif;
+				beste = pExq->node[j].vdif;
 				besti = j;
 			}
+
+//		printf("node %d: %d, %f\n", besti, pExq->node[besti].num, beste);
 
 		pCur = pExq->node[besti].pHistogram;
 		pExq->node[besti].pHistogram = NULL;
 		pExq->node[i].pHistogram = NULL;
+		while(pCur != NULL && pCur != pExq->node[besti].pSplit)
+		{
+			pNext = pCur->pNext;
+			pCur->pNext = pExq->node[i].pHistogram;
+			pExq->node[i].pHistogram = pCur;
+			pCur = pNext;
+		}
+
 		while(pCur != NULL)
 		{
 			pNext = pCur->pNext;
-			if(pCur->color.r * pExq->node[besti].dir.r +
-				pCur->color.g * pExq->node[besti].dir.g +
-				pCur->color.b * pExq->node[besti].dir.b +
-				pCur->color.a * pExq->node[besti].dir.a > pExq->node[besti].split)
-			{
-				pCur->pNext = pExq->node[i].pHistogram;
-				pExq->node[i].pHistogram = pCur;
-			}
-			else
-			{
-				pCur->pNext = pExq->node[besti].pHistogram;
-				pExq->node[besti].pHistogram = pCur;
-			}
+			pCur->pNext = pExq->node[besti].pHistogram;
+			pExq->node[besti].pHistogram = pCur;
 			pCur = pNext;
 		}
 
@@ -205,10 +213,10 @@ void exq_quantize_ex(exq_data *pExq, int nColors, int hq)
 	pExq->optimized = 0;
 }
 
-float exq_get_mean_error(exq_data *pExq)
+exq_float exq_get_mean_error(exq_data *pExq)
 {
 	int i, n;
-	float err;
+	exq_float err;
 
 	n = 0;
 	err = 0;
@@ -218,13 +226,14 @@ float exq_get_mean_error(exq_data *pExq)
 		err += pExq->node[i].err;
 	}
 
-	return sqrtf(err / n) * 256;
+	return sqrt(err / n) * 256;
 }
 
 void exq_get_palette(exq_data *pExq, unsigned char *pPal, int nColors)
 {
-	int i;
-	float r, g, b, a;
+	int i, j;
+	exq_float r, g, b, a;
+	unsigned char channelMask = 0xff00 >> pExq->numBitsPerChannel;
 
 	if(nColors > pExq->numColors)
 		nColors = pExq->numColors;
@@ -244,11 +253,32 @@ void exq_get_palette(exq_data *pExq, unsigned char *pPal, int nColors)
 			r /= a; g/= a; b/= a;
 		}
 
-		*pPal++ = (unsigned char)(r / SCALE_R * 255.9f);
-		*pPal++ = (unsigned char)(g / SCALE_G * 255.9f);
-		*pPal++ = (unsigned char)(b / SCALE_B * 255.9f);
-		*pPal++ = (unsigned char)(a / SCALE_A * 255.9f);
+		pPal[0] = (unsigned char)(r / SCALE_R * 255.9f);
+		pPal[1] = (unsigned char)(g / SCALE_G * 255.9f);
+		pPal[2] = (unsigned char)(b / SCALE_B * 255.9f);
+		pPal[3] = (unsigned char)(a / SCALE_A * 255.9f);
+
+		for(j = 0; j < 3; j++)
+			pPal[j] = (pPal[j] + (1 << (8 - pExq->numBitsPerChannel)) / 2) & channelMask;
+		pPal += 4;
 	}
+}
+
+void exq_set_palette(exq_data *pExq, unsigned char *pPal, int nColors)
+{
+	int i;
+
+	pExq->numColors = nColors;
+
+	for(i = 0; i < nColors; i++)
+	{
+		pExq->node[i].avg.r = *pPal++ * SCALE_R / 255.9f;
+		pExq->node[i].avg.g = *pPal++ * SCALE_G / 255.9f;
+		pExq->node[i].avg.b = *pPal++ * SCALE_B / 255.9f;
+		pExq->node[i].avg.a = *pPal++ * SCALE_A / 255.9f;
+	}
+
+	pExq->optimized = 1;
 }
 
 void exq_sum_node(exq_node *pNode)
@@ -256,7 +286,7 @@ void exq_sum_node(exq_node *pNode)
 	int n, n2;
 	exq_color fsum, fsum2, vc, tmp, tmp2, sum, sum2;
 	exq_histogram *pCur;
-	float isqrt, nv, v;
+	exq_float isqrt, nv, v;
 
 	n = 0;
 	fsum.r = fsum.g = fsum.b = fsum.a = 0;
@@ -325,7 +355,7 @@ void exq_sum_node(exq_node *pNode)
 		pNode->dir.b += tmp.b;
 		pNode->dir.a += tmp.a;
 	}
-	isqrt = 1 / sqrtf(pNode->dir.r * pNode->dir.r +
+	isqrt = 1 / sqrt(pNode->dir.r * pNode->dir.r +
 		pNode->dir.g * pNode->dir.g + pNode->dir.b * pNode->dir.b +
 		pNode->dir.a * pNode->dir.a);
 	pNode->dir.r *= isqrt;
@@ -339,8 +369,12 @@ void exq_sum_node(exq_node *pNode)
 	sum.r = sum.g = sum.b = sum.a = 0;
 	sum2.r = sum2.g = sum2.b = sum2.a = 0;
 	n2 = 0;
+	pNode->pSplit = pNode->pHistogram;
 	for(pCur = pNode->pHistogram; pCur != NULL; pCur = pCur->pNext)
 	{
+		if(pNode->pSplit == NULL)
+			pNode->pSplit = pCur;
+
 		n2 += pCur->num;
 		sum.r += pCur->color.r * pCur->num;
 		sum.g += pCur->color.g * pCur->num;
@@ -362,17 +396,20 @@ void exq_sum_node(exq_node *pNode)
 		tmp2.g = (fsum2.g - sum2.g) - (fsum.g-sum.g)*(fsum.g-sum.g) / (n - n2);
 		tmp2.b = (fsum2.b - sum2.b) - (fsum.b-sum.b)*(fsum.b-sum.b) / (n - n2);
 		tmp2.a = (fsum2.a - sum2.a) - (fsum.a-sum.a)*(fsum.a-sum.a) / (n - n2);
+
 		nv = tmp.r + tmp.g + tmp.b + tmp.a + tmp2.r + tmp2.g + tmp2.b + tmp2.a;
 		if(-nv > pNode->vdif)
 		{
 			pNode->vdif = -nv;
-			pNode->split = pNode->dir.r * pCur->color.r +
-				pNode->dir.g * pCur->color.g + pNode->dir.b * pCur->color.b +
-				pNode->dir.a * pCur->color.a + 0.0001f;
+			pNode->pSplit = NULL;
 		}
 	}
 
+	if(pNode->pSplit == pNode->pHistogram)
+		pNode->pSplit = pNode->pSplit->pNext;
+
 	pNode->vdif += v;
+//	printf("error sum: %f, vdif: %f\n", pNode->err, pNode->vdif);
 }
 
 void exq_optimize_palette(exq_data *pExq, int iter)
@@ -441,10 +478,22 @@ void exq_map_image(exq_data *pExq, int nPixels, unsigned char *pIn,
 void exq_map_image_ordered(exq_data *pExq, int width, int height,
 						   unsigned char *pIn, unsigned char *pOut)
 {
+	exq_map_image_dither(pExq, width, height, pIn, pOut, 1);
+}
+
+void exq_map_image_random(exq_data *pExq, int nPixels,
+						   unsigned char *pIn, unsigned char *pOut)
+{
+	exq_map_image_dither(pExq, nPixels, 1, pIn, pOut, 0);
+}
+
+void exq_map_image_dither(exq_data *pExq, int width, int height,
+						  unsigned char *pIn, unsigned char *pOut, int ordered)
+{
 	int x, y, i, j, d;
 	exq_color p, scale, tmp;
 	exq_histogram *pHist;
-	const float dither_matrix[4] = { -0.375, 0.125, 0.375, -0.125 };
+	const exq_float dither_matrix[4] = { -0.375, 0.125, 0.375, -0.125 };
 
 	if(!pExq->optimized)
 		exq_optimize_palette(pExq, 4);
@@ -452,7 +501,10 @@ void exq_map_image_ordered(exq_data *pExq, int width, int height,
 	for(y = 0; y < height; y++)
 		for(x = 0; x < width; x++)
 		{
-			d = (x & 1) + (y & 1) * 2;
+			if(ordered)
+				d = (x & 1) + (y & 1) * 2;
+			else
+				d = rand() & 3;
 			pHist = exq_find_histogram(pExq, pIn);
 			p.r = *pIn++ / 255.0f * SCALE_R;
 			p.g = *pIn++ / 255.0f * SCALE_G;
@@ -532,15 +584,12 @@ void exq_map_image_ordered(exq_data *pExq, int width, int height,
 
 exq_histogram *exq_find_histogram(exq_data *pExq, unsigned char *pCol)
 {
-	int hash;
+	unsigned int hash;
 	int r, g, b, a;
 	exq_histogram *pCur;
 
 	r = *pCol++; g = *pCol++; b = *pCol++; a = *pCol++;
-	hash = (r & EXQ_HASH_CHANNEL_MASK) +
-		((g & EXQ_HASH_CHANNEL_MASK) << EXQ_HASH_BITS) +
-		((b & EXQ_HASH_CHANNEL_MASK) << (EXQ_HASH_BITS * 2)) +
-		((a & EXQ_HASH_CHANNEL_MASK) << (EXQ_HASH_BITS * 3));
+	hash = exq_make_hash(((unsigned int)r) | (((unsigned int)g) << 8) | (((unsigned int)b) << 16) | (((unsigned int)a) << 24));
 
 	pCur = pExq->pHash[hash];
 	while(pCur != NULL && (pCur->or != r || pCur->og != g ||
@@ -552,7 +601,7 @@ exq_histogram *exq_find_histogram(exq_data *pExq, unsigned char *pCol)
 
 unsigned char exq_find_nearest_color(exq_data *pExq, exq_color *pColor)
 {
-	float bestv;
+	exq_float bestv;
 	int besti, i;
 	exq_color dif;
 
@@ -574,11 +623,11 @@ unsigned char exq_find_nearest_color(exq_data *pExq, exq_color *pColor)
 	return (unsigned char)besti;
 }
 
-void exq_sort(exq_histogram **ppHist, float (*sortfunc)(const exq_histogram *pHist))
+void exq_sort(exq_histogram **ppHist, exq_float (*sortfunc)(const exq_histogram *pHist))
 {
 	exq_histogram *pLow, *pHigh, *pCur, *pNext;
 	int n = 0;
-	float sum = 0;
+	exq_float sum = 0;
 
 	for(pCur = *ppHist; pCur != NULL; pCur = pCur->pNext)
 	{
@@ -628,29 +677,29 @@ void exq_sort(exq_histogram **ppHist, float (*sortfunc)(const exq_histogram *pHi
 	pLow->pNext = pHigh;
 }
 
-float exq_sort_by_r(const exq_histogram *pHist)
+exq_float exq_sort_by_r(const exq_histogram *pHist)
 {
 	return pHist->color.r;
 }
 
-float exq_sort_by_g(const exq_histogram *pHist)
+exq_float exq_sort_by_g(const exq_histogram *pHist)
 {
 	return pHist->color.g;
 }
 
-float exq_sort_by_b(const exq_histogram *pHist)
+exq_float exq_sort_by_b(const exq_histogram *pHist)
 {
 	return pHist->color.b;
 }
 
-float exq_sort_by_a(const exq_histogram *pHist)
+exq_float exq_sort_by_a(const exq_histogram *pHist)
 {
 	return pHist->color.a;
 }
 
 exq_color exq_sort_dir;
 
-float exq_sort_by_dir(const exq_histogram *pHist)
+exq_float exq_sort_by_dir(const exq_histogram *pHist)
 {
 	return pHist->color.r * exq_sort_dir.r +
 		pHist->color.g * exq_sort_dir.g +
