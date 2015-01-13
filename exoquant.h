@@ -66,7 +66,7 @@ typedef struct _exq_color
 typedef struct _exq_histogram
 {
 	exq_color				color;
-	unsigned char			or, og, ob, oa;
+	unsigned char			ored, ogreen, oblue, oalpha;
 	int						palIndex;
 	exq_color				ditherScale;
 	int						ditherIndex[4];
