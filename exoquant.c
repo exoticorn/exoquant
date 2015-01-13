@@ -100,8 +100,8 @@ void exq_feed(exq_data *pExq, unsigned char *pData, int nPixels)
 		hash = exq_make_hash(((unsigned int)r) | (((unsigned int)g) << 8) | (((unsigned int)b) << 16) | (((unsigned int)a) << 24));
 
 		pCur = pExq->pHash[hash];
-		while(pCur != NULL && (pCur->or != r || pCur->og != g ||
-			pCur->ob != b || pCur->oa != a))
+		while(pCur != NULL && (pCur->ored != r || pCur->ogreen != g ||
+			pCur->oblue != b || pCur->oalpha != a))
 			pCur = pCur->pNextInHash;
 
 		if(pCur != NULL)
@@ -111,7 +111,7 @@ void exq_feed(exq_data *pExq, unsigned char *pData, int nPixels)
 			pCur = (exq_histogram*)malloc(sizeof(exq_histogram));
 			pCur->pNextInHash = pExq->pHash[hash];
 			pExq->pHash[hash] = pCur;
-			pCur->or = r; pCur->og = g; pCur->ob = b; pCur->oa = a;
+			pCur->ored = r; pCur->ogreen = g; pCur->oblue = b; pCur->oalpha = a;
 			r &= channelMask; g &= channelMask; b &= channelMask;
 			pCur->color.r = r / 255.0f * SCALE_R;
 			pCur->color.g = g / 255.0f * SCALE_G;
@@ -592,8 +592,8 @@ exq_histogram *exq_find_histogram(exq_data *pExq, unsigned char *pCol)
 	hash = exq_make_hash(((unsigned int)r) | (((unsigned int)g) << 8) | (((unsigned int)b) << 16) | (((unsigned int)a) << 24));
 
 	pCur = pExq->pHash[hash];
-	while(pCur != NULL && (pCur->or != r || pCur->og != g ||
-		pCur->ob != b || pCur->oa != a))
+	while(pCur != NULL && (pCur->ored != r || pCur->ogreen != g ||
+		pCur->oblue != b || pCur->oalpha != a))
 		pCur = pCur->pNextInHash;
 
 	return pCur;
