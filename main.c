@@ -3,7 +3,8 @@
 #include <malloc.h>
 #include <string.h>
 #include <math.h>
-#include "libpng/png.h"
+#include "png.h"
+#include "zlib.h"
 #include "exoquant.h"
 
 #ifndef NULL
