@@ -26,15 +26,15 @@ Then you can set the following options:
 
 #### Option: Alpha is no transparency
 
-Use this options if you don't use the alpha channel of your image/texture as transparency or if the color is already premultiplied by the alpha. To set this options just call `exq_no_transparency`:
+Use this option if you don't use the alpha channel of your image/texture as transparency or if the color is already premultiplied by the alpha. To set this option just call `exq_no_transparency`:
 
     exq_no_transparency(pExq);
 
 ### Step 2: Feed the image data
 
-Now you need to feed the image data to the quantizer. The image data needs to be 32 bit per pixel. The first byte of each pixel needs to be the red channel, the last byte needs to be alpha.
+Now you need to feed the image data to the quantizer. The image data needs to be 32 bits per pixel. The first byte of each pixel needs to be the red channel, the last byte needs to be alpha.
 
-To feed the image data you have to call `exq_feed`, which can be called more than once to create a shared palette for more than one image, for examples for a texture with several mipmap levels:
+To feed the image data you have to call `exq_feed`, which can be called more than once to create a shared palette for more than one image, for example for a texture with several mipmap levels:
 
     exq_feed(pExq, pImage_data, num_pixels);
 
@@ -55,7 +55,7 @@ To feed the image data you have to call `exq_feed`, which can be called more tha
 
 ### Step 6: Clean up
 
-Call `exq_free` to free the qunatization data:
+Call `exq_free` to free the quantization data:
 
    exq_free(pExq);
 
