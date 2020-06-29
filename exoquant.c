@@ -253,10 +253,10 @@ void exq_get_palette(exq_data *pExq, unsigned char *pPal, int nColors)
 			r /= a; g/= a; b/= a;
 		}
 
-		pPal[0] = (unsigned char)(r / SCALE_R * 255.9f);
-		pPal[1] = (unsigned char)(g / SCALE_G * 255.9f);
-		pPal[2] = (unsigned char)(b / SCALE_B * 255.9f);
-		pPal[3] = (unsigned char)(a / SCALE_A * 255.9f);
+		pPal[0] = (unsigned char)(r / SCALE_R * 255.0f);
+		pPal[1] = (unsigned char)(g / SCALE_G * 255.0f);
+		pPal[2] = (unsigned char)(b / SCALE_B * 255.0f);
+		pPal[3] = (unsigned char)(a / SCALE_A * 255.0f);
 
 		for(j = 0; j < 3; j++)
 			pPal[j] = (pPal[j] + (1 << (8 - pExq->numBitsPerChannel)) / 2) & channelMask;
@@ -272,10 +272,10 @@ void exq_set_palette(exq_data *pExq, unsigned char *pPal, int nColors)
 
 	for(i = 0; i < nColors; i++)
 	{
-		pExq->node[i].avg.r = *pPal++ * SCALE_R / 255.9f;
-		pExq->node[i].avg.g = *pPal++ * SCALE_G / 255.9f;
-		pExq->node[i].avg.b = *pPal++ * SCALE_B / 255.9f;
-		pExq->node[i].avg.a = *pPal++ * SCALE_A / 255.9f;
+		pExq->node[i].avg.r = *pPal++ * SCALE_R / 255.0f;
+		pExq->node[i].avg.g = *pPal++ * SCALE_G / 255.0f;
+		pExq->node[i].avg.b = *pPal++ * SCALE_B / 255.0f;
+		pExq->node[i].avg.a = *pPal++ * SCALE_A / 255.0f;
 	}
 
 	pExq->optimized = 1;
